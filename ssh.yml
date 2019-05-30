@@ -1,0 +1,18 @@
+- name: Restart adb as root
+  shell: /usr/bin/adb root
+  register: adb_root
+
+- fail: 
+    msg: Restarting adb as root failed
+  when: adb_root.stderr != "" | adb_root.stderr != "adbd is already running as root"
+
+- name:
+  shell: /usr/bin/adb shell mount -o rw,remount /system
+  register: adb_remount
+
+- fail:
+    msg: Could not remount system partition
+  when: adb_remount.stderr != ""
+
+- name: Start and generate SSHD
+  shell: /usr/bin/adb push files/sshd_config /system/etc/ssh/sshd_config 
