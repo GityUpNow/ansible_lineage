@@ -1,18 +1,72 @@
-- name: Restart adb as root
-  shell: /usr/bin/adb root
-  register: adb_root
+- name: Prepare the sshd`for ansible
+  connection: local
+  gather_facts: false 
+  hosts: localhost
+  vars: 
+    adb_executable: "/usr/bin/adb"
+    shell_command: "{{ adb_executable }} shell"
+    sshd_path: "/system/etc/ssh/sshd_config"
+    authorized_keys_path: "/data/ssh/authorized_keys"
+    tmp_file: "/data/local/tmp/auth.tmp"
+    exists_string: "Key already installed"
+  tasks:
+  
+    - name: Restart adb as root
+      shell: "{{ adb_executable }} root"
+      register: adb_root
+      failed_when: "\"unable to connect\" in adb_root.stderr"
 
-- fail: 
-    msg: Restarting adb as root failed
-  when: adb_root.stderr != "" | adb_root.stderr != "adbd is already running as root"
+    - name: Remount system partition as read-write
+      shell: "{{ shell_command }} mount -o rw,remount /system"
+      register: adb_remount
+      failed_when: adb_remount.stderr != ""
 
-- name:
-  shell: /usr/bin/adb shell mount -o rw,remount /system
-  register: adb_remount
+    - name: Sed password authentication
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PasswordAuthentication\\ yes/PasswordAuthentication\\ no/g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
+    
+    - name: Sed challengeresponse
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?ChallengeResponseAuthentication\\ yes/ChallengeResponseAuthentication\\ no/g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
+    
+    - name: Sed pukkey auth
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PubkeyAuthentication\\ no/PubkeyAuthentication\\ yes/g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
 
-- fail:
-    msg: Could not remount system partition
-  when: adb_remount.stderr != ""
+    - name: Push public key to tmp-directory
+      shell: "{{ adb_executable }} push ~/.ssh/id_rsa.pub {{ tmp_file }}"
+      register: tmp
+      failed_when: tmp.stderr != ""
 
-- name: Start and generate SSHD
-  shell: /usr/bin/adb push files/sshd_config /system/etc/ssh/sshd_config 
+    - name: Check if authorized_keys exists
+      shell: "{{ shell_command }} test -f {{ authorized_keys_path }}" 
+      register: file_exists
+      ignore_errors: yes
+
+    - name: Check if key exists in authorized_keys
+      shell: "{{ shell_command }} \"if grep -q -f {{ tmp_file }} {{ authorized_keys_path }}; then echo {{ exists_string | quote }}; fi\""
+      register: auth_check
+      failed_when: auth_check.stderr != ""
+      when: file_exists.rc == 0
+
+    - name: Append key to authorized_keys
+      shell: "{{ shell_command }} \"cat {{ tmp_file }} >> {{ authorized_keys_path }}\""
+      when: auth_check is not defined or auth_check.stdout is not defined or auth_check.stdout is not search(exists_string)
+
+    - name: Remove tmp_file
+      shell: "{{ shell_command }} rm {{ tmp_file }}"
+
+    - name: Check if ssh is running
+      shell: "{{ shell_command }} pgrep sshd"
+      register: ssh_status
+      ignore_errors: yes
+
+    - name: Kill all running sshd-processes
+      shell: "{{ shell_command }} killall -9 sshd"
+      when: ssh_status.rc == 0
+
+    - name: Start ssh demon and generate missing keys
+      shell: "{{ shell_command }} /system/bin/start-ssh &"
