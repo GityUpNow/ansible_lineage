@@ -21,18 +21,38 @@
       register: adb_remount
       failed_when: adb_remount.stderr != ""
 
-    - name: Sed password authentication
-      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PasswordAuthentication\\ yes/PasswordAuthentication\\ no/g\" {{ sshd_path }}"
+    - name: Sed PasswordAuthentication in sshd
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PasswordAuthentication\\ \\(yes\\|no\\)/PasswordAuthentication\\ no/g\" {{ sshd_path }}"
       register: sed_out
       failed_when: sed_out.stderr != ""
     
-    - name: Sed challengeresponse
-      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?ChallengeResponseAuthentication\\ yes/ChallengeResponseAuthentication\\ no/g\" {{ sshd_path }}"
+    - name: Sed PermitRootLogin in sshd
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PermitRootLogin\\ \\(yes\\|no\\)/PermitRootLogin\\ yes/g\" {{ sshd_path }}"
       register: sed_out
       failed_when: sed_out.stderr != ""
     
-    - name: Sed pukkey auth
-      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PubkeyAuthentication\\ no/PubkeyAuthentication\\ yes/g\" {{ sshd_path }}"
+    - name: Sed PermitEmptyPassword in sshd
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PermitEmptyPasswords\\ \\(yes\\|no\\)/PermitEmptyPasswords\\ no/g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
+    
+    - name: Sed ChallengeResposnseAuthentication in sshd
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?ChallengeResponseAuthentication\\ \\(yes\\|no\\)/ChallengeResponseAuthentication\\ no/g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
+    
+    - name: Sed PubkeyAuthentication in sshd
+      shell: "{{ shell_command }} sed -ir \"s/\\(#\\)?PubkeyAuthentication\\ \\(yes\\|no\\)/PubkeyAuthentication\\ yes/g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
+
+    - name: Sed sftp-subystem in sshd
+      shell: "{{ shell_command }} sed -ir \"s\\;/usr/libexec/sftp-server\\;internal-sftp\\;g\" {{ sshd_path }}"
+      register: sed_out
+      failed_when: sed_out.stderr != ""
+   
+    - name: Sed remove \\# from Subsytem
+      shell: "{{ shell_command }} sed -ir \"s/#Subsystem/Subystem/g\" {{ sshd_path }}"
       register: sed_out
       failed_when: sed_out.stderr != ""
 
